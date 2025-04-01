@@ -1,19 +1,21 @@
-name: Manual Build and Release
+name: Manual Build and Optional Release
 
 on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag (e.g. v1.0.0)"
-        required: true
-      release_name:
-        description: "Release name (e.g. Network Tool v1.0.0)"
-        required: true
+        description: "Git tag (e.g. v1.0.0). Leave empty if no release."
+        required: false
+        default: ""
+      create_release:
+        description: "Create GitHub Release"
+        required: false
+        default: "false"
 
 jobs:
-  release:
+  build:
     runs-on: windows-latest
-    name: Build EXE and publish release
+    name: Build and optionally release
 
     steps:
       - name: Checkout repository
@@ -24,23 +26,37 @@ jobs:
           Install-Module -Name ps2exe -Force -Scope CurrentUser -AllowClobber
         shell: pwsh
 
-      - name: Convert .ps1 to .exe
+      - name: Convert PS1 to EXE
         run: |
-          $Input = "NetworkProfileManager.ps1"
-          $Output = "NetworkProfileManager.exe"
-          Invoke-PS2EXE -InputFile $Input -OutputFile $Output -NoConsole
+          $inputScript = "NetworkProfileManager.ps1"
+          $outputExe = "NetworkProfileManager.exe"
+          Invoke-PS2EXE -InputFile $inputScript -OutputFile $outputExe -NoConsole
         shell: pwsh
 
-      - name: Create ZIP file
+      - name: Create ZIP archive
         run: |
           Compress-Archive -Path NetworkProfileManager.exe -DestinationPath NetworkProfileManager.zip
         shell: pwsh
 
+      - name: Upload EXE as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerShell-GUI-EXE
+          path: NetworkProfileManager.exe
+
+      - name: Upload ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerShell-GUI-ZIP
+          path: NetworkProfileManager.zip
+
       - name: Create GitHub Release and upload ZIP
+        if: ${{ github.event.inputs.create_release == 'true' && github.event.inputs.tag_name != '' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
-          name: ${{ github.event.inputs.release_name }}
+          name: Release ${{ github.event.inputs.tag_name }}
           files: NetworkProfileManager.zip
+          body_path: CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
