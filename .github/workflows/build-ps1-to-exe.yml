@@ -1,0 +1,58 @@
+name: Build PowerShell Script to EXE
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create GitHub Release (requires tag)"
+        required: false
+        default: "false"
+
+jobs:
+  build:
+    name: Build and optionally release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PS2EXE via PowerShell Gallery
+        run: |
+          Install-Module -Name ps2exe -Force -Scope CurrentUser -AllowClobber
+        shell: pwsh
+
+      - name: Convert .ps1 to .exe
+        run: |
+          $InputScript = "NetworkProfileManager.ps1"
+          $OutputExe = "NetworkProfileManager.exe"
+          Invoke-PS2EXE -InputFile $InputScript -OutputFile $OutputExe -NoConsole
+        shell: pwsh
+
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path NetworkProfileManager.exe -DestinationPath NetworkProfileManager.zip
+        shell: pwsh
+
+      - name: Upload EXE as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerShell-EXE
+          path: NetworkProfileManager.exe
+
+      - name: Upload ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerShell-ZIP
+          path: NetworkProfileManager.zip
+
+      - name: Create GitHub Release and upload ZIP
+        if: github.ref_type == 'tag' && github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: NetworkProfileManager.zip
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
